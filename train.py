@@ -21,6 +21,7 @@ import random
 import time
 import logging
 from tensorboardX import SummaryWriter
+from utils.logger import AverageMeter
 from utils.pyt_utils import decode_labels, inv_preprocess, decode_predictions
 from loss.criterion import CriterionDSN, CriterionOhemDSN
 from engine import Engine
@@ -33,7 +34,7 @@ BATCH_SIZE = 8
 DATA_DIRECTORY = 'cityscapes'
 DATA_LIST_PATH = './dataset/list/cityscapes/train.lst'
 IGNORE_LABEL = 255
-INPUT_SIZE = '769,769'
+INPUT_SIZE = '512,1024'
 LEARNING_RATE = 1e-2
 MOMENTUM = 0.9
 NUM_CLASSES = 19
@@ -198,6 +199,8 @@ def main():
         global_iteration = args.start_iters
         avgloss = 0
 
+        batch_time = AverageMeter()
+
         while run:
             epoch = global_iteration // len(train_loader)
             if engine.distributed:
@@ -207,7 +210,7 @@ def main():
             pbar = tqdm(range(len(train_loader)), file=sys.stdout,
                         bar_format=bar_format)
             dataloader = iter(train_loader)
-
+            tic = time.time()
             for idx in pbar:
                 global_iteration += 1
 
@@ -223,11 +226,16 @@ def main():
                 loss.backward()
                 optimizer.step()
 
+                batch_time.add(time.time()-tic)
+                tic = time.time()
+
 
                 print_str = 'Epoch{}/Iters{}'.format(epoch, global_iteration) \
                         + ' Iter{}/{}:'.format(idx + 1, len(train_loader)) \
                         + ' lr=%.2e' % lr \
                         + ' loss=%.2f' % reduce_loss.item()
+                        + ' time=%.5f' % batch_time.average()
+                        + ' mem=%f' % (torch.cuda.max_memory_allocated() / 1024.0 / 1024.0)
 
                 pbar.set_description(print_str, refresh=False)
 

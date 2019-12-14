@@ -22,6 +22,7 @@ import scipy.ndimage as nd
 from math import ceil
 from PIL import Image as PILImage
 from utils.pyt_utils import load_model
+from utils.logger import AverageMeter
 
 from engine import Engine
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
@@ -62,7 +63,7 @@ def get_parser():
                         help="Comma-separated string with height and width of images.")
     parser.add_argument("--num-workers", type=int, default=8,
                         help="choose the number of recurrence.")
-    parser.add_argument("--whole", type=bool, default=False,
+    parser.add_argument("--whole", type=bool, default=True,
                         help="use whole input size.")
     parser.add_argument("--model", type=str, default='None',
                         help="choose model.")
@@ -239,14 +240,16 @@ def main():
         pbar = tqdm(range(len(test_loader)), file=sys.stdout,
                     bar_format=bar_format)
         dataloader = iter(test_loader)
-
+        batch_time = AverageMeter()
+        max_mem = 0
         for idx in pbar:
             image, label, size, name = dataloader.next()
             size = size[0].numpy()
+            tic = time.time()
             with torch.no_grad():
                 output = predict_multiscale(model, image, input_size, [1.0], args.num_classes, False, 0)
-
-
+            max_mem = max(max_mem, torch.cuda.max_memory_allocated() / 1024.0 / 1024.0)
+            batch_time.add(time.time() - tic)
             seg_pred = np.asarray(np.argmax(output, axis=3), dtype=np.uint8)
             seg_gt = np.asarray(label.numpy()[:,:size[0],:size[1]], dtype=np.int)
 
@@ -272,7 +275,7 @@ def main():
 
         IU_array = (tp / np.maximum(1.0, pos + res - tp))
         mean_IU = IU_array.mean()
-        
+        print("[Summary] time: {} mem: {}".format(batch_time.average(), max_mem))
         # getConfusionMatrixPlot(confusion_matrix)
         if engine.distributed and engine.local_rank == 0:
             print({'meanIU':mean_IU, 'IU_array':IU_array})
