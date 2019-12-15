@@ -226,7 +226,7 @@ def main():
                 loss.backward()
                 optimizer.step()
 
-                batch_time.add(time.time()-tic)
+                batch_time.update(time.time()-tic)
                 tic = time.time()
 
 

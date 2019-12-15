@@ -6,6 +6,7 @@ import numpy as np
 import sys
 import json
 from tqdm import tqdm
+import time
 
 import torch
 import torch.nn as nn
@@ -30,10 +31,10 @@ IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 DATA_DIRECTORY = 'cityscapes'
 DATA_LIST_PATH = './dataset/list/cityscapes/val.lst'
 IGNORE_LABEL = 255
-BATCH_SIZE = 4
+BATCH_SIZE = 1
 NUM_CLASSES = 19
 NUM_STEPS = 500 # Number of images in the validation set.
-INPUT_SIZE = '769,769'
+INPUT_SIZE = '1024,2048'
 RESTORE_FROM = './deeplab_resnet.ckpt'
 
 def get_parser():
@@ -167,7 +168,7 @@ def predict_multiscale(net, image, tile_size, scales, classes, flip_evaluation, 
         scale_image = ndimage.zoom(image, (1.0, 1.0, scale, scale), order=1, prefilter=False)
         # scaled_probs = predict_whole(net, scale_image, tile_size, recurrence)
         scaled_probs = predict_sliding(net, scale_image, tile_size, classes, recurrence)
-        if flip_evaluation == True:
+        if False:
             # flip_scaled_probs = predict_whole(net, scale_image[:,:,:,::-1].copy(), tile_size, recurrence)
             flip_scaled_probs = predict_sliding(net, scale_image[:,:,:,::-1].copy(), tile_size, classes, recurrence)
             scaled_probs = 0.5 * (scaled_probs + flip_scaled_probs[:,::-1,:])
@@ -213,8 +214,8 @@ def main():
         seg_model = eval('networks.' + args.model + '.Seg_Model')(
             num_classes=args.num_classes
         )
-        
-        load_model(seg_model, args.restore_from)
+        if 'unet'  not in args.model:
+            load_model(seg_model, args.restore_from)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         seg_model.to(device)
@@ -249,7 +250,7 @@ def main():
             with torch.no_grad():
                 output = predict_multiscale(model, image, input_size, [1.0], args.num_classes, False, 0)
             max_mem = max(max_mem, torch.cuda.max_memory_allocated() / 1024.0 / 1024.0)
-            batch_time.add(time.time() - tic)
+            batch_time.update(time.time() - tic)
             seg_pred = np.asarray(np.argmax(output, axis=3), dtype=np.uint8)
             seg_gt = np.asarray(label.numpy()[:,:size[0],:size[1]], dtype=np.int)
 
